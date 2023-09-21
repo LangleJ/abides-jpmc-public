@@ -20,6 +20,7 @@ parts/
 sdist/
 var/
 wheels/
+log/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
@@ -151,3 +152,4 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+.vscode/launch.json

@@ -56,8 +56,8 @@ class MeanRevertingOracle(Oracle):
 
         now = dt.datetime.now()
 
-        logger.debug("MeanRevertingOracle initialized for symbols {}", symbols)
-        logger.debug("MeanRevertingOracle initialization took {}", now - then)
+        logger.debug(f"MeanRevertingOracle initialized for symbols {symbols}")
+        logger.debug(f"MeanRevertingOracle initialization took {now - then}")
 
     def generate_fundamental_value_series(
         self, symbol: str, r_bar: int, kappa: float, sigma_s: float
@@ -121,7 +121,7 @@ class MeanRevertingOracle(Oracle):
         )
 
         open_price = self.r[symbol].loc[self.mkt_open]
-        logger.debug("Oracle: market open price was was {}", open_price)
+        logger.debug("Oracle: market open price was was {open_price}")
 
         return open_price
 
@@ -159,8 +159,8 @@ class MeanRevertingOracle(Oracle):
         else:
             obs = int(round(random_state.normal(loc=r_t, scale=sqrt(sigma_n))))
 
-        logger.debug("Oracle: current fundamental value is {} at {}", r_t, current_time)
-        logger.debug("Oracle: giving client value observation {}", obs)
+        logger.debug(f"Oracle: current fundamental value is {r_t} at {current_time}")
+        logger.debug(f"Oracle: giving client value observation {obs}" )
 
         # Reminder: all simulator prices are specified in integer cents.
         return obs

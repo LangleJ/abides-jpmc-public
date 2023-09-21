@@ -5,38 +5,31 @@ import numpy as np
 
 from abides_core import Message, NanosecondTime
 
-from ..generators import OrderSizeGenerator
 from ..messages.query import QuerySpreadResponseMsg
 from ..orders import Side
 from .trading_agent import TradingAgent
 
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-
-class NoiseAgent(TradingAgent):
-    """
-    Noise agent implement simple strategy. The agent wakes up once and places 1 order.
-    """
-
+class WorldAgent(TradingAgent):
     def __init__(
         self,
+        trades: pd.Series,  # qty bought, +ve for buy -ve for sell
         id: int,
         name: Optional[str] = None,
         type: Optional[str] = None,
         random_state: Optional[np.random.RandomState] = None,
         symbol: str = "IBM",
-        starting_cash: int = 100000,
-        log_orders: bool = False,
-        order_size_model: Optional[OrderSizeGenerator] = None,
-        wakeup_time: Optional[NanosecondTime] = None,
+        starting_cash: int = 100_000,
+        log_orders: float = False,
     ) -> None:
-
         # Base class init.
         super().__init__(id, name, type, random_state, starting_cash, log_orders)
 
-        self.wakeup_time: NanosecondTime = wakeup_time
-
+        self.trades = trades
+        # Store important parameters particular to the ZI agent.
         self.symbol: str = symbol  # symbol to trade
 
         # The agent uses this to track whether it has begun its strategy or is still
@@ -51,12 +44,6 @@ class NoiseAgent(TradingAgent):
         # units have passed.
         self.prev_wake_time: Optional[NanosecondTime] = None
 
-        self.size: Optional[int] = (
-            self.random_state.randint(20, 50) if order_size_model is None else None
-        )
-
-        self.order_size_model = order_size_model  # Probabilistic model for order size
-
     def kernel_starting(self, start_time: NanosecondTime) -> None:
         # self.kernel is set in Agent.kernel_initializing()
         # self.exchange_id is set in TradingAgent.kernel_starting()
@@ -69,41 +56,35 @@ class NoiseAgent(TradingAgent):
         # Always call parent method to be safe.
         super().kernel_stopping()
 
-        # Fix the problem of logging an agent that has not waken up
-        try:
-            # noise trader surplus is marked to EOD
-            bid, bid_vol, ask, ask_vol = self.get_known_bid_ask(self.symbol)
-        except KeyError:
-            self.logEvent("FINAL_VALUATION", self.starting_cash, True)
-        else:
-            # Print end of day valuation.
-            H = int(round(self.get_holdings(self.symbol), -2) / 100)
+        # Print end of day valuation.
+        H = int(round(self.get_holdings(self.symbol), -2) / 100)
+        # May request real fundamental value from oracle as part of final cleanup/stats.
 
-            if bid and ask:
-                rT = int(bid + ask) / 2
-            else:
-                rT = self.last_trade[self.symbol]
+        # marked to fundamental
+        rT = self.oracle.observe_price(
+            self.symbol, self.current_time, sigma_n=0, random_state=self.random_state
+        )
 
-            # final (real) fundamental value times shares held.
-            surplus = rT * H
+        # final (real) fundamental value times shares held.
+        surplus = rT * H
 
-            logger.debug("Surplus after holdings: {}", surplus)
+        logger.debug("Surplus after holdings: {}", surplus)
 
-            # Add ending cash value and subtract starting cash value.
-            surplus += self.holdings["CASH"] - self.starting_cash
-            surplus = float(surplus) / self.starting_cash
+        # Add ending cash value and subtract starting cash value.
+        surplus += self.holdings["CASH"] - self.starting_cash
+        surplus = float(surplus) / self.starting_cash
 
-            self.logEvent("FINAL_VALUATION", surplus, True)
+        self.logEvent("FINAL_VALUATION", surplus, True)
 
-            logger.debug(
-                "{} final report.  Holdings: {}, end cash: {}, start cash: {}, final fundamental: {}, surplus: {}",
-                self.name,
-                H,
-                self.holdings["CASH"],
-                self.starting_cash,
-                rT,
-                surplus,
-            )
+        logger.debug(
+            "{} final report.  Holdings: {}, end cash: {}, start cash: {}, final fundamental: {}, surplus: {}",
+            self.name,
+            H,
+            self.holdings["CASH"],
+            self.starting_cash,
+            rT,
+            surplus,
+        )
 
     def wakeup(self, current_time: NanosecondTime) -> None:
         # Parent class handles discovery of exchange times and market_open wakeup call.
@@ -129,35 +110,51 @@ class NoiseAgent(TradingAgent):
             # Market is closed and we already got the daily close price.
             return
 
-        if self.wakeup_time > current_time:
-            self.set_wakeup(self.wakeup_time)
-            return
+        iloc = self.trades.index.get_loc(pd.Timestamp(self.current_time), method='ffill')
 
-        if self.mkt_closed and self.symbol not in self.daily_close_price:
+        if self.prev_wake_time is None:
+            self.next_time = self.current_time
+            while self.next_time<=self.current_time:
+                self.next_time = self.trades.index[iloc].value
+                iloc += 1
+            self.set_wakeup(self.next_time)
+        else:
+            if self.current_time == self.next_time:
+                # This was a scheduled wake
+                iloc = self.trades.index.get_loc(pd.Timestamp(self.current_time))
+                self.next_time = self.trades.index[iloc+1].value
+
+                self.set_wakeup(self.next_time)
+            else:
+                # This was a wake frquency wake
+                return
+
+        if self.mkt_closed and (not self.symbol in self.daily_close_price):
             self.get_current_spread(self.symbol)
             self.state = "AWAITING_SPREAD"
             return
 
-        if type(self) == NoiseAgent:
+        if type(self) == WorldAgent:
             self.get_current_spread(self.symbol)
             self.state = "AWAITING_SPREAD"
         else:
             self.state = "ACTIVE"
 
+        self.prev_wake_time = self.current_time
+        return
+
     def placeOrder(self) -> None:
-        # place order in random direction at a mid
-        buy_indicator = self.random_state.randint(0, 1 + 1)
+        # estimate final value of the fundamental price
+        # used for surplus calculation
+        self.current_time
+        trade = self.trades.loc[pd.Timestamp(self.next_time)]
+        quantity = abs(trade)
+        buy = trade > 0
+        side = Side.BID if buy == 1 else Side.ASK
 
-        bid, bid_vol, ask, ask_vol = self.get_known_bid_ask(self.symbol)
-
-        if self.order_size_model is not None:
-            self.size = self.order_size_model.sample(random_state=self.random_state)
-
-        if self.size > 0:
-            if buy_indicator == 1 and ask:
-                self.place_limit_order(self.symbol, self.size, Side.BID, ask)
-            elif not buy_indicator and bid:
-                self.place_limit_order(self.symbol, self.size, Side.ASK, bid)
+        if quantity > 0:
+            self.place_market_order(self.symbol, quantity, side)
+        return
 
     def receive_message(
         self, current_time: NanosecondTime, sender_id: int, message: Message
@@ -183,10 +180,15 @@ class NoiseAgent(TradingAgent):
 
                 # We now have the information needed to place a limit order with the eta
                 # strategic threshold parameter.
+                val = self.next_time - self.current_time
+                #if self.next_time == self.current_time:
                 self.placeOrder()
                 self.state = "AWAITING_WAKEUP"
 
-    # Internal state and logic specific to this agent subclass.
+        # Cancel all open orders.
+        # Return value: did we issue any cancellation requests?
+
 
     def get_wake_frequency(self) -> NanosecondTime:
-        return self.random_state.randint(low=0, high=100)
+        val = 1 #self.random_state.randint(low = 0, high = 100)
+        return val

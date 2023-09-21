@@ -121,7 +121,7 @@ class OrderBook:
                 # No matching order was found, so the new order enters the order book.  Notify the agent.
                 self.enter_order(deepcopy(order), quiet=quiet)
 
-                logger.debug("ACCEPTED: new order {}", order)
+                logger.debug(f"ACCEPTED: new order {order}")
                 logger.debug(
                     "SENT: notifications of order acceptance to agent {} for order {}",
                     order.agent_id,
@@ -155,7 +155,7 @@ class OrderBook:
             trade_qty = 0
             trade_price = 0
             for q, p in executed:
-                logger.debug("Executed: {} @ {}", q, p)
+                logger.debug(f"Executed: {q} @ {p}")
                 trade_qty += q
                 trade_price += p * q
 
@@ -452,12 +452,8 @@ class OrderBook:
                 if price_level.is_empty:
                     del book[i]
 
-                logger.debug("CANCELLED: order {}", order)
-                logger.debug(
-                    "SENT: notifications of order cancellation to agent {} for order {}",
-                    cancelled_order.agent_id,
-                    cancelled_order.order_id,
-                )
+                logger.debug(f"CANCELLED: order {order}")
+                logger.debug(f"SENT: notifications of order cancellation to agent {cancelled_order.agent_id} for order {cancelled_order.order_id}")
 
                 if cancelled_order.is_price_to_comply:
                     self.cancel_order(metadata["ptc_other_half"], quiet=True)
@@ -519,7 +515,7 @@ class OrderBook:
                     )
                 )
 
-                logger.debug("MODIFIED: order {}", order)
+                logger.debug(f"MODIFIED: order {order}")
                 logger.debug(
                     "SENT: notifications of order modification to agent {} for order {}",
                     new_order.agent_id,
@@ -572,7 +568,7 @@ class OrderBook:
                     )
                 )
 
-                logger.debug("CANCEL_PARTIAL: order {}", order)
+                logger.debug(f"CANCEL_PARTIAL: order {order}")
                 logger.debug(
                     "SENT: notifications of order partial cancellation to agent {} for order {}",
                     new_order.agent_id,

@@ -276,7 +276,7 @@ class AdaptiveMarketMakerAgent(TradingAgent):
 
                     self.state["AWAITING_SPREAD"] = False
                 else:
-                    logger.debug("SPREAD MISSING at time {}", current_time)
+                    logger.debug(f"SPREAD MISSING at time {current_time}")
                     self.state[
                         "AWAITING_SPREAD"
                     ] = False  # use last mid price and spread
@@ -314,11 +314,11 @@ class AdaptiveMarketMakerAgent(TradingAgent):
 
                     self.state["AWAITING_MARKET_DATA"] = False
                 else:
-                    logger.debug("SPREAD MISSING at time {}", current_time)
+                    logger.debug(f"SPREAD MISSING at time {current_time}")
                     self.state["AWAITING_MARKET_DATA"] = False
 
             if (
-                self.state["MARKET_DATA"] is False
+                self.state["AWAITING_MARKET_DATA"] is False  #JL was MARKET_DATA, now AWAITING_MARKET_DATA
                 and self.state["AWAITING_TRANSACTED_VOLUME"] is False
             ):
                 self.place_orders(mid)

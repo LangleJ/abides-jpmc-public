@@ -16,6 +16,7 @@ from .utils import fmt_ts, str_to_ns
 
 logger = logging.getLogger(__name__)
 
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 class Kernel:
     """
